@@ -1,0 +1,27 @@
+name: build-only
+on: workflow_dispatch
+permissions:
+  contents: write
+concurrency:
+  group: build-only
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci
+      # pipefail: without it a failed sanity gate would pass through `tee`.
+      - name: Scrape and sanity gate
+        shell: bash
+        run: |
+          set -o pipefail
+          node src/cli.js 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Publish cards.ndjson
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view data-latest >/dev/null 2>&1 ||
+            gh release create data-latest --title data-latest --notes "Built on demand"
+          gh release upload data-latest data/cards.ndjson --clobber
